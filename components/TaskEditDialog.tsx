@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Task } from '@/lib/types'
 import {
   Dialog,
@@ -12,12 +12,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { addHours, endOfDay, addDays, format } from 'date-fns'
+import { addDays, endOfDay } from 'date-fns'
 
 interface Props {
+  task: Task | null
   open: boolean
   onClose: () => void
-  onAdd: (task: Task) => void
+  onSave: (updated: Task) => void
 }
 
 type Urgency = Task['urgency']
@@ -36,95 +37,95 @@ function toLocalDatetimeValue(ts: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function TaskInput({ open, onClose, onAdd }: Props) {
+export default function TaskEditDialog({ task, open, onClose, onSave }: Props) {
   const [name, setName] = useState('')
-  const [deadlineTs, setDeadlineTs] = useState<number>(() =>
-    endOfDay(new Date()).getTime()
-  )
+  const [deadlineTs, setDeadlineTs] = useState(Date.now())
   const [urgency, setUrgency] = useState<Urgency>('medium')
-  const [estimate, setEstimate] = useState<number>(30)
-  const [estimateInput, setEstimateInput] = useState('30')
-  const [errors, setErrors] = useState<{ name?: string; deadline?: string }>({})
+  const [estimateInput, setEstimateInput] = useState('60')
+  const [progress, setProgress] = useState(0)
+  const [progressInput, setProgressInput] = useState('0')
+  const [errors, setErrors] = useState<{ name?: string }>({})
 
-  function resetForm() {
-    setName('')
-    setDeadlineTs(endOfDay(new Date()).getTime())
-    setUrgency('medium')
-    setEstimate(30)
-    setEstimateInput('30')
+  // Populate form when task changes
+  useEffect(() => {
+    if (!task) return
+    setName(task.name)
+    setDeadlineTs(task.deadline)
+    setUrgency(task.urgency)
+    setEstimateInput(String(task.originalEstimate))
+    setProgress(task.progress ?? 0)
+    setProgressInput(String(task.progress ?? 0))
     setErrors({})
+  }, [task])
+
+  if (!task) return null
+
+  // estimateMinutes derived from originalEstimate × (1 - progress/100)
+  const parsedOriginalEstimate = Math.max(1, parseInt(estimateInput, 10) || 1)
+  const derivedEstimate = Math.round(parsedOriginalEstimate * (1 - progress / 100))
+
+  function handleProgressSlider(val: number) {
+    const clamped = Math.max(0, Math.min(100, val))
+    setProgress(clamped)
+    setProgressInput(String(clamped))
   }
 
-  function handleClose() {
-    resetForm()
-    onClose()
-  }
-
-  function validate(): boolean {
-    const e: { name?: string; deadline?: string } = {}
-    if (!name.trim()) e.name = '请输入任务名称'
-    if (!deadlineTs || isNaN(deadlineTs)) e.deadline = '请选择截止时间'
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  function handleSubmit() {
-    if (!validate()) return
-    const task: Task = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      deadline: deadlineTs,
-      urgency,
-      estimateMinutes: estimate,
-      originalEstimate: estimate,
-      progress: 0,
-      createdAt: Date.now(),
-      completed: false,
+  function handleProgressInput(val: string) {
+    setProgressInput(val)
+    const n = parseInt(val, 10)
+    if (!isNaN(n)) {
+      setProgress(Math.max(0, Math.min(100, n)))
     }
-    onAdd(task)
-    resetForm()
-    onClose()
-  }
-
-  function setDeadlineShortcut(ms: number) {
-    setDeadlineTs(ms)
-    setErrors((e) => ({ ...e, deadline: undefined }))
   }
 
   function handleDeadlineInput(val: string) {
     const d = new Date(val)
-    if (!isNaN(d.getTime())) {
-      setDeadlineTs(d.getTime())
-      setErrors((e) => ({ ...e, deadline: undefined }))
-    }
+    if (!isNaN(d.getTime())) setDeadlineTs(d.getTime())
   }
 
-  function handleEstimateInput(val: string) {
-    setEstimateInput(val)
-    const n = parseInt(val, 10)
-    if (!isNaN(n) && n > 0) setEstimate(n)
+  function validate(): boolean {
+    const e: { name?: string } = {}
+    if (!name.trim()) e.name = '请输入任务名称'
+    setErrors(e)
+    return Object.keys(e).length === 0
   }
+
+  function handleSave() {
+    if (!validate()) return
+    if (!task) return
+    const updated: Task = {
+      ...task,
+      name: name.trim(),
+      deadline: deadlineTs,
+      urgency,
+      originalEstimate: parsedOriginalEstimate,
+      estimateMinutes: derivedEstimate,
+      progress,
+    }
+    onSave(updated)
+    onClose()
+  }
+
+  const isCompleted = task.completed
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md w-full">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold">添加任务</DialogTitle>
+          <DialogTitle className="text-lg font-bold">编辑任务</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
           {/* 任务名 */}
           <div className="space-y-1.5">
-            <Label htmlFor="task-name">任务名称</Label>
+            <Label htmlFor="edit-name">任务名称</Label>
             <Input
-              id="task-name"
-              placeholder="比如：写完周报"
+              id="edit-name"
               value={name}
               onChange={(e) => {
                 setName(e.target.value)
-                if (e.target.value.trim()) setErrors((v) => ({ ...v, name: undefined }))
+                if (e.target.value.trim()) setErrors({})
               }}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               autoFocus
             />
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
@@ -148,14 +149,13 @@ export default function TaskInput({ open, onClose, onAdd }: Props) {
                 <button
                   key={label}
                   type="button"
-                  onClick={() => setDeadlineShortcut(ts())}
+                  onClick={() => setDeadlineTs(ts())}
                   className="text-xs px-3 py-1 rounded-full border border-slate-300 hover:bg-slate-100 transition-colors text-slate-600"
                 >
                   {label}
                 </button>
               ))}
             </div>
-            {errors.deadline && <p className="text-xs text-red-500">{errors.deadline}</p>}
           </div>
 
           {/* 紧急程度 */}
@@ -177,31 +177,36 @@ export default function TaskInput({ open, onClose, onAdd }: Props) {
             </div>
           </div>
 
-          {/* 预估耗时 */}
+          {/* 预估耗时（原始） */}
           <div className="space-y-1.5">
-            <Label htmlFor="estimate">预估耗时（分钟）</Label>
+            <Label htmlFor="edit-estimate">
+              原始预估耗时（分钟）
+              {!isCompleted && (
+                <span className="text-slate-400 font-normal ml-2 text-xs">
+                  → 剩余 {derivedEstimate}min
+                </span>
+              )}
+            </Label>
             <Input
-              id="estimate"
+              id="edit-estimate"
               type="number"
               min={1}
               value={estimateInput}
-              onChange={(e) => handleEstimateInput(e.target.value)}
-              placeholder="分钟数"
+              onChange={(e) => setEstimateInput(e.target.value)}
+              disabled={isCompleted}
             />
             <div className="flex gap-2">
               {ESTIMATE_SHORTCUTS.map((min) => (
                 <button
                   key={min}
                   type="button"
-                  onClick={() => {
-                    setEstimate(min)
-                    setEstimateInput(String(min))
-                  }}
+                  disabled={isCompleted}
+                  onClick={() => setEstimateInput(String(min))}
                   className={`flex-1 py-1 rounded-lg border text-xs font-medium transition-all
-                    ${estimate === min
+                    ${parsedOriginalEstimate === min
                       ? 'bg-slate-900 text-white border-slate-900'
-                      : 'border-slate-200 text-slate-500 hover:border-slate-400'
-                    }
+                      : 'border-slate-200 text-slate-500 hover:border-slate-400'}
+                    ${isCompleted ? 'opacity-40 cursor-not-allowed' : ''}
                   `}
                 >
                   {min}m
@@ -209,15 +214,44 @@ export default function TaskInput({ open, onClose, onAdd }: Props) {
               ))}
             </div>
           </div>
+
+          {/* 进度 */}
+          {!isCompleted && (
+            <div className="space-y-2">
+              <Label>
+                当前进度
+                <span className="text-slate-400 font-normal ml-2 text-xs">{progress}%</span>
+              </Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={progress}
+                  onChange={(e) => handleProgressSlider(Number(e.target.value))}
+                  className="flex-1 h-2 accent-slate-700"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={progressInput}
+                  onChange={(e) => handleProgressInput(e.target.value)}
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-slate-500">%</span>
+              </div>
+              <p className="text-xs text-slate-400">
+                剩余耗时 = {parsedOriginalEstimate}min × {100 - progress}% = <span className="font-semibold text-slate-600">{derivedEstimate}min</span>
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleClose}>
-            取消
-          </Button>
-          <Button onClick={handleSubmit} className="bg-slate-900 hover:bg-slate-700">
-            添加
-          </Button>
+          <Button variant="outline" onClick={onClose}>取消</Button>
+          <Button onClick={handleSave} className="bg-slate-900 hover:bg-slate-700">保存</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

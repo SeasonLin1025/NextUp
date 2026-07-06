@@ -7,9 +7,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 interface Props {
   tasks: Task[]
   onToggle: (id: string) => void
+  onEdit: (task: Task) => void
 }
 
-export default function TaskList({ tasks, onToggle }: Props) {
+export default function TaskList({ tasks, onToggle, onEdit }: Props) {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -26,23 +27,20 @@ export default function TaskList({ tasks, onToggle }: Props) {
     <div className="space-y-2">
       <AnimatePresence mode="popLayout">
         {pending.map((task) => (
-          <TaskCard key={task.id} task={task} onToggle={onToggle} />
+          <TaskCard key={task.id} task={task} onToggle={onToggle} onEdit={onEdit} />
         ))}
       </AnimatePresence>
 
       {done.length > 0 && (
         <>
-          <motion.div
-            layout
-            className="pt-2 pb-1"
-          >
+          <motion.div layout className="pt-2 pb-1">
             <p className="text-xs text-gray-400 font-medium tracking-wide">
               已完成 {done.length} 项
             </p>
           </motion.div>
           <AnimatePresence mode="popLayout">
             {done.map((task) => (
-              <TaskCard key={task.id} task={task} onToggle={onToggle} />
+              <TaskCard key={task.id} task={task} variant="done" onToggle={onToggle} onEdit={onEdit} />
             ))}
           </AnimatePresence>
         </>

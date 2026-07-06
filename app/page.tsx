@@ -1,20 +1,35 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Task } from '@/lib/types'
-import { loadTasks, saveTasks } from '@/lib/storage'
-import { sortTasks } from '@/lib/priority'
+import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen } from '@/lib/storage'
+import { groupTasks } from '@/lib/priority'
 import CurrentTask from '@/components/CurrentTask'
-import TaskList from '@/components/TaskList'
+import TaskCard from '@/components/TaskCard'
 import TaskInput from '@/components/TaskInput'
+import TaskEditDialog from '@/components/TaskEditDialog'
+import SectionGroup from '@/components/SectionGroup'
+import OverdueBanner from '@/components/OverdueBanner'
 import { Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function HomePage() {
   const [tasks, setTasks] = useState<Task[]>([])
-  const [sorted, setSorted] = useState<Task[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editTask, setEditTask] = useState<Task | null>(null)
   const [mounted, setMounted] = useState(false)
+
+  // Section open/close state
+  const [pendingOpen, setPendingOpen] = useState(true)
+  const [longTermOpen, setLongTermOpen] = useState(true)
+  const [overdueOpen, setOverdueOpen] = useState(false)
+  const [doneOpen, setDoneOpen] = useState(false)
+
+  // Overdue banner & seen tracking
+  const [newOverdueIds, setNewOverdueIds] = useState<string[]>([])
+  const [bannerVisible, setBannerVisible] = useState(false)
+
+  const overdueRef = useRef<HTMLDivElement>(null)
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -23,35 +38,57 @@ export default function HomePage() {
     setMounted(true)
   }, [])
 
-  // Re-sort whenever tasks change
-  useEffect(() => {
-    setSorted(sortTasks(tasks))
-  }, [tasks])
+  // Compute groups whenever tasks change
+  const groups = groupTasks(tasks)
 
-  // Persist whenever tasks change (after mount)
+  // Detect new overdue tasks
+  useEffect(() => {
+    if (!mounted) return
+    const seenIds = loadSeenOverdueIds()
+    const currentOverdueIds = groups.overdue.map((t) => t.id)
+    const unseen = currentOverdueIds.filter((id) => !seenIds.includes(id))
+
+    if (unseen.length > 0) {
+      setNewOverdueIds(unseen)
+      setBannerVisible(true)
+      setOverdueOpen(true) // auto-expand
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, groups.overdue.length])
+
+  // When overdue section opens + has new tasks → mark as seen
+  useEffect(() => {
+    if (overdueOpen && newOverdueIds.length > 0) {
+      markOverdueSeen(newOverdueIds)
+      setNewOverdueIds([])
+    }
+  }, [overdueOpen, newOverdueIds])
+
+  // Persist tasks whenever they change
   useEffect(() => {
     if (mounted) saveTasks(tasks)
   }, [tasks, mounted])
 
-  // Re-sort every minute so scores stay fresh
+  // Re-group every minute to keep deadline buckets fresh
   useEffect(() => {
     const timer = setInterval(() => {
-      setSorted((prev) => sortTasks(prev))
+      setTasks((prev) => [...prev]) // trigger re-group
     }, 60_000)
     return () => clearInterval(timer)
   }, [])
 
   const handleToggle = useCallback((id: string) => {
     setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              completed: !t.completed,
-              completedAt: !t.completed ? Date.now() : undefined,
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.id !== id) return t
+        const nowCompleting = !t.completed
+        return {
+          ...t,
+          completed: nowCompleting,
+          completedAt: nowCompleting ? Date.now() : undefined,
+          completedOverdue: nowCompleting ? t.deadline < Date.now() : undefined,
+        }
+      })
     )
   }, [])
 
@@ -59,8 +96,25 @@ export default function HomePage() {
     setTasks((prev) => [...prev, task])
   }, [])
 
-  // Top task = first uncompleted in sorted list
-  const topTask = sorted.find((t) => !t.completed) ?? null
+  const handleEdit = useCallback((updated: Task) => {
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+  }, [])
+
+  // Banner click: scroll to overdue section, mark seen, hide banner
+  const handleBannerClick = () => {
+    setOverdueOpen(true)
+    setBannerVisible(false)
+    // Mark seen immediately
+    markOverdueSeen(newOverdueIds)
+    setNewOverdueIds([])
+    // Scroll smooth
+    setTimeout(() => {
+      overdueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
+  // Top task: first pending task (not overdue, not long-term)
+  const topTask = groups.pending[0] ?? null
 
   if (!mounted) {
     return (
@@ -79,7 +133,8 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="container mx-auto max-w-lg py-8 px-4 pb-24">
+      <div className="container mx-auto max-w-lg py-8 px-4 pb-28">
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -87,19 +142,98 @@ export default function HomePage() {
             <p className="text-xs text-slate-400 mt-0.5">专注当下，一件一件来</p>
           </div>
           <span className="text-xs text-slate-400 bg-white border rounded-full px-3 py-1 shadow-sm">
-            {sorted.filter((t) => !t.completed).length} 项待完成
+            {groups.pending.length} 项待完成
           </span>
         </div>
 
-        {/* Current Task Card */}
-        <div className="mb-6">
+        {/* 1. 顶部大卡片 */}
+        <div className="mb-4">
           <CurrentTask task={topTask} />
         </div>
 
-        {/* Task List */}
-        <AnimatePresence>
-          <TaskList tasks={sorted} onToggle={handleToggle} />
-        </AnimatePresence>
+        {/* 2. 已超时通知横条 */}
+        <div className="mb-4">
+          <OverdueBanner
+            count={newOverdueIds.length}
+            visible={bannerVisible}
+            onClick={handleBannerClick}
+          />
+        </div>
+
+        {/* Task sections */}
+        <div className="space-y-5">
+
+          {/* 3. 待完成 */}
+          {groups.pending.length > 0 && (
+            <SectionGroup
+              title="待完成"
+              count={groups.pending.length}
+              isOpen={pendingOpen}
+              onToggle={() => setPendingOpen((v) => !v)}
+              titleColor="text-slate-600"
+            >
+              <AnimatePresence mode="popLayout">
+                {groups.pending.map((task) => (
+                  <TaskCard key={task.id} task={task} variant="default" onToggle={handleToggle} onEdit={setEditTask} />
+                ))}
+              </AnimatePresence>
+            </SectionGroup>
+          )}
+
+          {/* 4. 长线任务 */}
+          {groups.longTerm.length > 0 && (
+            <SectionGroup
+              title="长线任务"
+              count={groups.longTerm.length}
+              isOpen={longTermOpen}
+              onToggle={() => setLongTermOpen((v) => !v)}
+              titleColor="text-blue-500"
+            >
+              <AnimatePresence mode="popLayout">
+                {groups.longTerm.map((task) => (
+                  <TaskCard key={task.id} task={task} variant="longTerm" onToggle={handleToggle} onEdit={setEditTask} />
+                ))}
+              </AnimatePresence>
+            </SectionGroup>
+          )}
+
+          {/* 5. 已超时 */}
+          {groups.overdue.length > 0 && (
+            <SectionGroup
+              ref={overdueRef}
+              title="已超时"
+              count={groups.overdue.length}
+              isOpen={overdueOpen}
+              onToggle={() => setOverdueOpen((v) => !v)}
+              badge={newOverdueIds.length}
+              titleColor="text-red-500"
+            >
+              <AnimatePresence mode="popLayout">
+                {groups.overdue.map((task) => (
+                  <TaskCard key={task.id} task={task} variant="overdue" onToggle={handleToggle} onEdit={setEditTask} />
+                ))}
+              </AnimatePresence>
+            </SectionGroup>
+          )}
+
+          {/* 6. 已完成 */}
+          {groups.done.length > 0 && (
+            <SectionGroup
+              title="已完成"
+              count={groups.done.length}
+              isOpen={doneOpen}
+              onToggle={() => setDoneOpen((v) => !v)}
+              titleColor="text-gray-400"
+            >
+              <AnimatePresence mode="popLayout">
+                {groups.done.map((task) => (
+                  <TaskCard key={task.id} task={task} variant="done" onToggle={handleToggle} onEdit={setEditTask} />
+                ))}
+              </AnimatePresence>
+            </SectionGroup>
+          )}
+
+        </div>
       </div>
 
       {/* Floating Action Button */}
@@ -118,6 +252,14 @@ export default function HomePage() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onAdd={handleAdd}
+      />
+
+      {/* Task Edit Dialog */}
+      <TaskEditDialog
+        task={editTask}
+        open={editTask !== null}
+        onClose={() => setEditTask(null)}
+        onSave={handleEdit}
       />
     </main>
   )
