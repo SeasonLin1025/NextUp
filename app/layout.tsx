@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" className="light" style={{ colorScheme: 'light' }}>
       <body style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>{children}</body>
     </html>
   );

@@ -10,6 +10,7 @@ import TaskInput from '@/components/TaskInput'
 import TaskEditDialog from '@/components/TaskEditDialog'
 import SectionGroup from '@/components/SectionGroup'
 import OverdueBanner from '@/components/OverdueBanner'
+import BottomNav from '@/components/BottomNav'
 import { Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -261,6 +262,8 @@ export default function HomePage() {
         onClose={() => setEditTask(null)}
         onSave={handleEdit}
       />
+
+      <BottomNav />
     </main>
   )
 }
