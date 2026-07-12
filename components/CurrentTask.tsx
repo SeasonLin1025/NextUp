@@ -1,26 +1,58 @@
 'use client'
 
 import { Task } from '@/lib/types'
-import { formatDistanceToNow, differenceInHours, differenceInMinutes } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { getTaskSchedulingMeta, getAttentionTasks, RiskTier } from '@/lib/priority'
 import { Card, CardContent } from '@/components/ui/card'
 import { motion } from 'framer-motion'
 
 interface Props {
   task: Task | null
+  allTasks?: Task[]
 }
 
-function formatTimeLeft(deadline: number): string {
-  const now = Date.now()
+// ─── 格式化工具 ───────────────────────────────
+
+function formatMinutes(minutes: number): string {
+  const abs = Math.abs(Math.round(minutes))
+  if (abs < 60) return `${abs}m`
+  const h = Math.floor(abs / 60)
+  const m = abs % 60
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
+
+function formatTimeLeft(deadline: number, now: number): string {
   const diffMs = deadline - now
   if (diffMs <= 0) return '已超时'
-  const h = Math.floor(diffMs / 3_600_000)
-  const m = Math.floor((diffMs % 3_600_000) / 60_000)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  return formatMinutes(diffMs / 60_000)
 }
 
-export default function CurrentTask({ task }: Props) {
+function formatSlack(slackMinutes: number): { label: string; isDeficit: boolean } {
+  const str = formatMinutes(slackMinutes)
+  if (slackMinutes >= 0) return { label: `余裕 ${str}`, isDeficit: false }
+  return { label: `缺口 ${str}`, isDeficit: true }
+}
+
+// ─── Risk Tier 样式 ───────────────────────────
+
+const RISK_TIER_STYLE: Record<RiskTier, { bg: string; text: string; dot: string }> = {
+  1: { bg: 'bg-red-500/20',    text: 'text-red-300',    dot: '🔴' },
+  2: { bg: 'bg-orange-500/20', text: 'text-orange-300', dot: '🟠' },
+  3: { bg: 'bg-yellow-500/20', text: 'text-yellow-300', dot: '🟡' },
+  4: { bg: 'bg-slate-500/20',  text: 'text-slate-400',  dot: '🔵' },
+}
+
+// attention 列表只展示 Tier 1-3
+const ATTENTION_TIER_BADGE: Partial<Record<RiskTier, { bg: string; text: string; label: string }>> = {
+  1: { bg: 'bg-red-500/25',    text: 'text-red-300',    label: '临界且时间不足' },
+  2: { bg: 'bg-orange-500/25', text: 'text-orange-300', label: '时间不足' },
+  3: { bg: 'bg-yellow-500/25', text: 'text-yellow-300', label: '临界但可完成' },
+}
+
+const MAX_ATTENTION = 2
+
+// ─── 组件 ─────────────────────────────────────
+
+export default function CurrentTask({ task, allTasks = [] }: Props) {
   if (!task) {
     return (
       <motion.div
@@ -38,8 +70,16 @@ export default function CurrentTask({ task }: Props) {
     )
   }
 
-  const timeLeft = formatTimeLeft(task.deadline)
-  const isOverdue = task.deadline < Date.now()
+  const now = Date.now()
+  const meta = getTaskSchedulingMeta(task, now)
+  const timeLeft = formatTimeLeft(task.deadline, now)
+  const slack = formatSlack(meta.slackMinutes)
+  const tierStyle = RISK_TIER_STYLE[meta.riskTier]
+
+  // 其他需要关注的任务
+  const attentionAll = getAttentionTasks(allTasks, task.id, now)
+  const attentionShow = attentionAll.slice(0, MAX_ATTENTION)
+  const attentionHidden = attentionAll.length - attentionShow.length
 
   return (
     <motion.div
@@ -49,15 +89,78 @@ export default function CurrentTask({ task }: Props) {
     >
       <Card className="bg-gradient-to-br from-slate-900 to-slate-700 border-0 shadow-xl text-white">
         <CardContent className="py-8 px-7">
-          <p className="text-xs font-semibold tracking-widest text-slate-400 uppercase mb-3">
-            现在做这个
-          </p>
+
+          {/* 标题行 */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold tracking-widest text-slate-400 uppercase">
+              现在做这个
+            </p>
+            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${tierStyle.bg} ${tierStyle.text}`}>
+              {tierStyle.dot} {meta.riskLabel}
+            </span>
+          </div>
+
+          {/* 任务名 */}
           <p className="text-4xl font-bold leading-tight break-words mb-4">
             {task.name}
           </p>
-          <p className={`text-sm ${isOverdue ? 'text-red-400' : 'text-slate-400'}`}>
-            距截止 {timeLeft} · 预估 {task.estimateMinutes}min
+
+          {/* 副标题 */}
+          <p className="text-sm text-slate-400">
+            距截止 {timeLeft}
+            {' · '}
+            预计还需 {formatMinutes(meta.remainingEstimateMinutes)}
+            {' · '}
+            <span className={slack.isDeficit ? 'text-red-400 font-semibold' : 'text-slate-400'}>
+              {slack.label}
+            </span>
           </p>
+
+          {/* 其他需要关注区域 */}
+          {attentionShow.length > 0 && (
+            <div className="mt-4 bg-white/10 rounded-lg px-3 py-2.5 space-y-2">
+              <p className="text-xs font-semibold text-slate-300 mb-1.5">
+                其他需要关注（{attentionAll.length}）
+              </p>
+
+              {attentionShow.map(({ task: at, meta: am }) => {
+                const atTimeLeft = formatTimeLeft(at.deadline, now)
+                const atSlack = formatSlack(am.slackMinutes)
+                const badge = ATTENTION_TIER_BADGE[am.riskTier as 1 | 2 | 3]
+
+                return (
+                  <div key={at.id} className="flex flex-col gap-0.5">
+                    {/* 任务名 + 标签 */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-semibold text-white/90 truncate max-w-[160px]">
+                        {at.name}
+                      </span>
+                      {badge && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.bg} ${badge.text}`}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                    {/* 时间信息 */}
+                    <p className="text-[11px] text-slate-400 leading-snug">
+                      距截止 {atTimeLeft} · 预计还需 {formatMinutes(am.remainingEstimateMinutes)}
+                      {' · '}
+                      <span className={atSlack.isDeficit ? 'text-red-400' : ''}>
+                        {atSlack.label}
+                      </span>
+                    </p>
+                  </div>
+                )
+              })}
+
+              {attentionHidden > 0 && (
+                <p className="text-[11px] text-slate-400 pt-0.5">
+                  +{attentionHidden} 项未展示
+                </p>
+              )}
+            </div>
+          )}
+
         </CardContent>
       </Card>
     </motion.div>

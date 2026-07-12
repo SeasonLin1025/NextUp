@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Task } from '@/lib/types'
 import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen } from '@/lib/storage'
-import { groupTasks } from '@/lib/priority'
+import { groupTasks, getRecommendedTask } from '@/lib/priority'
 import CurrentTask from '@/components/CurrentTask'
 import TaskCard from '@/components/TaskCard'
 import TaskInput from '@/components/TaskInput'
@@ -113,8 +113,8 @@ export default function HomePage() {
     }, 50)
   }
 
-  // Top task: first pending task (not overdue, not long-term)
-  const topTask = groups.pending[0] ?? null
+  // Top task: 基于 Risk Tier + Slack 算法推荐（包含待完成和长线任务）
+  const topTask = getRecommendedTask(tasks)
 
   if (!mounted) {
     return (
@@ -148,7 +148,7 @@ export default function HomePage() {
 
         {/* 1. 顶部大卡片 */}
         <div className="mb-4">
-          <CurrentTask task={topTask} />
+          <CurrentTask task={topTask} allTasks={tasks} />
         </div>
 
         {/* 2. 已超时通知横条 */}
