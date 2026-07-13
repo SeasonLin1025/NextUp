@@ -31,9 +31,10 @@ export default function DayTimeline({ tasks, dateStr }: Props) {
   let axisEnd   = DEFAULT_END
 
   for (const t of activeTasks) {
-    const startMs  = t.deadline - t.estimateMinutes * 60_000
-    const startH   = (startMs - dayBase) / 3_600_000
-    const endH     = (t.deadline - dayBase) / 3_600_000
+    // 轴范围按 start 扩展（确保时间段可见），但 HourRow 归属按 deadline
+    const startMs = t.deadline - t.estimateMinutes * 60_000
+    const startH  = (startMs - dayBase) / 3_600_000
+    const endH    = (t.deadline - dayBase) / 3_600_000
     if (startH < axisStart) axisStart = Math.floor(startH)
     if (endH > axisEnd)     axisEnd   = Math.ceil(endH)
   }
@@ -74,21 +75,20 @@ export default function DayTimeline({ tasks, dateStr }: Props) {
     return ids
   }, [activeTasks])
 
-  // ── 活跃任务 → startHour 归属 ────────────────
+  // ── 活跃任务 → deadline 小时归属（NextUp 核心：截止时间优先）────
   const activeByStartHour = useMemo(() => {
     const map = new Map<number, ActiveEntry[]>()
     for (const t of activeTasks) {
-      const meta      = getTaskSchedulingMeta(t, now)
-      const startMs   = t.deadline - t.estimateMinutes * 60_000
-      const startHour = Math.floor((startMs - dayBase) / 3_600_000)
-      const endHour   = Math.floor((t.deadline - dayBase) / 3_600_000)
-      const startMin  = Math.round((startMs - dayBase) / 60_000)
-      const endMin    = Math.round((t.deadline - dayBase) / 60_000)
-      const startHHmm = `${String(Math.floor(startMin / 60) % 24).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`
-      const endHHmm   = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`
+      const meta         = getTaskSchedulingMeta(t, now)
+      const startMs      = t.deadline - t.estimateMinutes * 60_000
+      const deadlineHour = Math.floor((t.deadline - dayBase) / 3_600_000)  // 按 deadline 归属
+      const startMin     = Math.round((startMs - dayBase) / 60_000)
+      const endMin       = Math.round((t.deadline - dayBase) / 60_000)
+      const startHHmm    = `${String(Math.floor(startMin / 60) % 24).padStart(2, '0')}:${String(startMin % 60).padStart(2, '0')}`
+      const endHHmm      = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`
       const entry: ActiveEntry = {
         task: t,
-        startHour,
+        startHour: deadlineHour,  // 字段名保留兼容，但值已改为 deadlineHour
         startHHmm,
         endHHmm,
         riskTier: meta.riskTier,
@@ -97,8 +97,8 @@ export default function DayTimeline({ tasks, dateStr }: Props) {
         urgency: t.urgency,
         estimateMinutes: t.estimateMinutes,
       }
-      if (!map.has(startHour)) map.set(startHour, [])
-      map.get(startHour)!.push(entry)
+      if (!map.has(deadlineHour)) map.set(deadlineHour, [])
+      map.get(deadlineHour)!.push(entry)
     }
     return map
   }, [activeTasks, conflictIds, dayBase, now])
