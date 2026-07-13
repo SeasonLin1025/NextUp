@@ -97,7 +97,7 @@ export default function CalendarMonth({
             onClick={() => onMonthChange(new Date())}
             className="text-xs px-3 py-1 rounded-full border border-slate-300 hover:bg-slate-100 text-slate-600 transition-colors"
           >
-            今天
+            本月
           </button>
           <button
             onClick={() => onMonthChange(addMonths(currentMonth, 1))}

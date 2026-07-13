@@ -5,6 +5,8 @@ import { getTaskSchedulingMeta, sortActiveTasksByRisk, RiskTier } from '@/lib/pr
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { formatMinutes } from './CalendarMonth'
+import Link from 'next/link'
+import { CalendarClock } from 'lucide-react'
 
 interface Props {
   date: Date
@@ -73,10 +75,17 @@ export default function DayTaskPanel({ date, tasks }: Props) {
   return (
     <div className="mt-4 rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
       {/* 面板标题 */}
-      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700">
           {dateStr} {weekStr} · {countStr}
         </h3>
+        <Link
+          href={`/calendar/day?date=${format(date, 'yyyy-MM-dd')}`}
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition-colors"
+        >
+          <CalendarClock size={13} />
+          <span>查看日视图</span>
+        </Link>
       </div>
 
       {/* 空状态 */}
