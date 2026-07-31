@@ -15,6 +15,13 @@ const SEVEN_DAYS_MS = 7 * 24 * 3_600_000
 /** 临界截止窗口（分钟）：deadline 距 now 不足该值视为"临界" */
 const NEAR_DEADLINE_WINDOW_MINUTES = 30
 
+/**
+ * 必须立即开始的缓冲系数：
+ * 若 minutesUntilDeadline <= remainingEstimateMinutes * mustStartBuffer，
+ * 说明剩余时间已不足以从容完成，必须立刻动手。
+ */
+export const MUST_START_BUFFER = 1.2
+
 // ─────────────────────────────────────────────
 // Risk Tier 类型
 // ─────────────────────────────────────────────
@@ -146,6 +153,31 @@ export function getAttentionTasks(
     return meta.slackMinutes < 0 || meta.minutesUntilDeadline <= 30 || meta.riskTier <= 3
   })
 
+  const sorted = sortActiveTasksByRisk(candidates, now)
+  return sorted.map((t) => ({ task: t, meta: getTaskSchedulingMeta(t, now) }))
+}
+
+/**
+ * 判断单个 active 任务是否进入"必须立即开始"状态
+ * 条件：minutesUntilDeadline <= remainingEstimateMinutes * MUST_START_BUFFER
+ */
+export function isMustStartNow(task: Task, now: number = Date.now()): boolean {
+  if (task.completed || task.deadline <= now) return false
+  const meta = getTaskSchedulingMeta(task, now)
+  return meta.minutesUntilDeadline <= meta.remainingEstimateMinutes * MUST_START_BUFFER
+}
+
+/**
+ * 收集所有"必须立即开始"的 active 任务，按风险排序
+ * 只针对 active 任务（未完成、deadline > now），已超时任务不进入
+ */
+export function getMustStartTasks(
+  tasks: Task[],
+  now: number = Date.now()
+): Array<{ task: Task; meta: TaskSchedulingMeta }> {
+  if (!tasks || tasks.length === 0) return []
+
+  const candidates = tasks.filter((t) => isMustStartNow(t, now))
   const sorted = sortActiveTasksByRisk(candidates, now)
   return sorted.map((t) => ({ task: t, meta: getTaskSchedulingMeta(t, now) }))
 }

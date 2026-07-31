@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Task } from '@/lib/types'
-import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen } from '@/lib/storage'
-import { groupTasks, getRecommendedTask } from '@/lib/priority'
+import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen, loadDismissedMustStart, markMustStartDismissed, mustStartSignature } from '@/lib/storage'
+import { groupTasks, getRecommendedTask, getMustStartTasks } from '@/lib/priority'
 import CurrentTask from '@/components/CurrentTask'
+import MustStartAlert from '@/components/MustStartAlert'
 import TaskCard from '@/components/TaskCard'
 import TaskInput from '@/components/TaskInput'
 import TaskEditDialog from '@/components/TaskEditDialog'
@@ -29,6 +30,9 @@ export default function HomePage() {
   // Overdue banner & seen tracking
   const [newOverdueIds, setNewOverdueIds] = useState<string[]>([])
   const [bannerVisible, setBannerVisible] = useState(false)
+
+  // "必须立即处理"提醒：dismiss 版本号（自增触发重算）
+  const [dismissVersion, setDismissVersion] = useState(0)
 
   const overdueRef = useRef<HTMLDivElement>(null)
 
@@ -117,6 +121,26 @@ export default function HomePage() {
   // Top task: 基于 Risk Tier + Slack 算法推荐（包含待完成和长线任务）
   const topTask = getRecommendedTask(tasks)
 
+  // "必须立即处理"提醒：过滤掉已 dismiss 且签名未变的任务
+  const MAX_MUST_START = 2
+  const mustStartAll = (() => {
+    void dismissVersion // 依赖 dismissVersion 触发重算
+    const dismissed = loadDismissedMustStart()
+    return getMustStartTasks(tasks).filter(({ task }) => {
+      const sig = dismissed[task.id]
+      if (!sig) return true // 从未关闭过
+      // 若关键字段变化（签名不同），重新提醒
+      return sig !== mustStartSignature(task.deadline, task.estimateMinutes)
+    })
+  })()
+  const mustStartShow = mustStartAll.slice(0, MAX_MUST_START)
+  const mustStartHidden = mustStartAll.length - mustStartShow.length
+
+  const handleDismissMustStart = useCallback((task: Task) => {
+    markMustStartDismissed(task.id, task.deadline, task.estimateMinutes)
+    setDismissVersion((v) => v + 1) // 触发重算
+  }, [])
+
   if (!mounted) {
     return (
       <main className="min-h-screen bg-gray-50">
@@ -151,6 +175,17 @@ export default function HomePage() {
         <div className="mb-4">
           <CurrentTask task={topTask} allTasks={tasks} />
         </div>
+
+        {/* 1.5 必须立即处理提醒 */}
+        {mustStartShow.length > 0 && (
+          <div className="mb-4">
+            <MustStartAlert
+              items={mustStartShow}
+              hiddenCount={mustStartHidden}
+              onDismiss={handleDismissMustStart}
+            />
+          </div>
+        )}
 
         {/* 2. 已超时通知横条 */}
         <div className="mb-4">
