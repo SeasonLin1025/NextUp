@@ -70,6 +70,33 @@ function toExplainPayload(t: Task, m: TaskSchedulingMeta) {
 
 export default function CurrentTask({ task, allTasks = [] }: Props) {
   if (!task) {
+    const now = Date.now()
+    const overdueCount = allTasks.filter((t) => !t.completed && t.deadline <= now).length
+
+    // 仅有超时任务：警示卡（与绿色明确区分，不用正面词汇）
+    if (overdueCount > 0) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: -16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <Card className="bg-gradient-to-br from-red-50 to-orange-50 border-red-200 shadow-md">
+            <CardContent className="py-10 text-center">
+              <p className="text-4xl mb-2">⚠️</p>
+              <p className="text-2xl font-bold text-red-700">
+                有 {overdueCount} 项已超时未处理
+              </p>
+              <p className="text-sm text-red-500 mt-2">
+                先决定这些怎么办：补做，或直接关掉
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )
+    }
+
+    // 真空状态：绿色卡片
     return (
       <motion.div
         initial={{ opacity: 0, y: -16 }}
