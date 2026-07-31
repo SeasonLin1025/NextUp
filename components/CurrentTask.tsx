@@ -1,9 +1,10 @@
 'use client'
 
 import { Task } from '@/lib/types'
-import { getTaskSchedulingMeta, getAttentionTasks, RiskTier } from '@/lib/priority'
+import { getTaskSchedulingMeta, getAttentionTasks, sortActiveTasksByRisk, RiskTier, TaskSchedulingMeta } from '@/lib/priority'
 import { Card, CardContent } from '@/components/ui/card'
 import { motion } from 'framer-motion'
+import RecommendReason from './RecommendReason'
 
 interface Props {
   task: Task | null
@@ -50,6 +51,21 @@ const ATTENTION_TIER_BADGE: Partial<Record<RiskTier, { bg: string; text: string;
 
 const MAX_ATTENTION = 2
 
+// ─── AI 推荐理由数据组装 ─────────────────────
+
+function toExplainPayload(t: Task, m: TaskSchedulingMeta) {
+  return {
+    name: t.name,
+    deadline: new Date(t.deadline).toISOString(),
+    estimateMinutes: t.estimateMinutes,
+    urgency: t.urgency,
+    progress: t.progress,
+    riskTier: m.riskTier,
+    slackMinutes: Math.round(m.slackMinutes),
+    minutesUntilDeadline: Math.round(m.minutesUntilDeadline),
+  }
+}
+
 // ─── 组件 ─────────────────────────────────────
 
 export default function CurrentTask({ task, allTasks = [] }: Props) {
@@ -80,6 +96,21 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
   const attentionAll = getAttentionTasks(allTasks, task.id, now)
   const attentionShow = attentionAll.slice(0, MAX_ATTENTION)
   const attentionHidden = attentionAll.length - attentionShow.length
+
+  // AI 推荐理由：取现有排序结果，第一名=当前推荐，第二名=runnerUp
+  // （排序完全由算法决定，AI 只做解释）
+  const activeSorted = sortActiveTasksByRisk(
+    allTasks.filter((t) => !t.completed && t.deadline > now),
+    now
+  )
+  const runnerUpTask = activeSorted.find((t) => t.id !== task.id) ?? null
+  // 缓存 key 包含上下文：推荐任务换人、第二名变化、任务总数变化都会使缓存失效
+  const reasonCacheKey = [
+    'v3',
+    task.id, task.deadline, task.estimateMinutes, task.progress,
+    runnerUpTask?.id ?? 'none', runnerUpTask?.deadline ?? 0,
+    activeSorted.length,
+  ].join(':')
 
   return (
     <motion.div
@@ -160,6 +191,14 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
               )}
             </div>
           )}
+
+          {/* AI 推荐理由（点击才请求，结果按签名缓存）*/}
+          <RecommendReason
+            cacheKey={reasonCacheKey}
+            current={toExplainPayload(task, meta)}
+            runnerUp={runnerUpTask ? toExplainPayload(runnerUpTask, getTaskSchedulingMeta(runnerUpTask, now)) : null}
+            activeCount={activeSorted.length}
+          />
 
         </CardContent>
       </Card>

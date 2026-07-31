@@ -103,3 +103,42 @@ export function markMustStartDismissed(
   map[id] = mustStartSignature(deadline, estimateMinutes)
   saveDismissedMustStart(map)
 }
+
+// ─────────────────────────────────────────────
+// AI 推荐理由缓存
+// key 格式：任务id:deadline:estimateMinutes:progress
+// 推荐任务或其关键字段变化后缓存自动失效
+// ─────────────────────────────────────────────
+
+const EXPLANATIONS_KEY = 'nextup_explanations'
+
+function loadExplanationMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(EXPLANATIONS_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+export function loadExplanation(sig: string): string | null {
+  return loadExplanationMap()[sig] ?? null
+}
+
+export function saveExplanation(sig: string, explanation: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const map = loadExplanationMap()
+    map[sig] = explanation
+    // 控制体积，最多保留最近 50 条
+    const keys = Object.keys(map)
+    if (keys.length > 50) {
+      for (const k of keys.slice(0, keys.length - 50)) delete map[k]
+    }
+    localStorage.setItem(EXPLANATIONS_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
