@@ -141,6 +141,7 @@ export default function TaskInput({ open, onClose, onAdd }: Props) {
       progress: 0,
       createdAt: Date.now(),
       lastProgressUpdatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       completed: false,
     }
     onAdd(task)

@@ -94,6 +94,8 @@ export default function HomePage() {
           completed: nowCompleting,
           completedAt: nowCompleting ? Date.now() : undefined,
           completedOverdue: nowCompleting ? t.deadline < Date.now() : undefined,
+          // 完成状态变化也是修改，更新 updatedAt
+          updatedAt: new Date().toISOString(),
         }
       })
     )

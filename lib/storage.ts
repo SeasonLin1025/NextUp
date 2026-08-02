@@ -1,8 +1,8 @@
 import { Task } from './types'
 
-const TASKS_KEY = 'nextup_tasks'
-const SEEN_OVERDUE_KEY = 'nextup_seen_overdue_ids'
-const DISMISSED_MUST_START_KEY = 'nextup_dismissed_must_start'
+export const TASKS_KEY = 'nextup_tasks'
+export const SEEN_OVERDUE_KEY = 'nextup_seen_overdue_ids'
+export const DISMISSED_MUST_START_KEY = 'nextup_dismissed_must_start'
 
 export function loadTasks(): Task[] {
   if (typeof window === 'undefined') return []
@@ -18,6 +18,12 @@ export function loadTasks(): Task[] {
       // 缺失时用创建时间兜底；连创建时间也没有则用当前时间（视为刚更新，不立刻触发停滞提醒）
       lastProgressUpdatedAt:
         t.lastProgressUpdatedAt ??
+        (typeof t.createdAt === 'number' && !isNaN(t.createdAt)
+          ? new Date(t.createdAt).toISOString()
+          : new Date().toISOString()),
+      // updatedAt 同理兜底，用于导入合并时判断新旧
+      updatedAt:
+        t.updatedAt ??
         (typeof t.createdAt === 'number' && !isNaN(t.createdAt)
           ? new Date(t.createdAt).toISOString()
           : new Date().toISOString()),
@@ -116,7 +122,7 @@ export function markMustStartDismissed(
 // 推荐任务或其关键字段变化后缓存自动失效
 // ─────────────────────────────────────────────
 
-const EXPLANATIONS_KEY = 'nextup_explanations'
+export const EXPLANATIONS_KEY = 'nextup_explanations'
 
 function loadExplanationMap(): Record<string, string> {
   if (typeof window === 'undefined') return {}
@@ -155,8 +161,7 @@ export function saveExplanation(sig: string, explanation: string): void {
 // 若之后 progress 发生变化（真的推进了），再次停滞满阈值时重新提醒。
 // ─────────────────────────────────────────────
 
-const DISMISSED_STAGNANT_KEY = 'nextup_dismissed_stagnant'
-
+export const DISMISSED_STAGNANT_KEY = 'nextup_dismissed_stagnant'
 export function loadDismissedStagnant(): Record<string, number> {
   if (typeof window === 'undefined') return {}
   try {

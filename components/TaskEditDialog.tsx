@@ -106,6 +106,8 @@ export default function TaskEditDialog({ task, open, onClose, onSave }: Props) {
       lastProgressUpdatedAt: progressChanged
         ? new Date().toISOString()
         : task.lastProgressUpdatedAt,
+      // 任何字段修改都更新 updatedAt（用于合并时判断新旧）
+      updatedAt: new Date().toISOString(),
     }
     onSave(updated)
     onClose()

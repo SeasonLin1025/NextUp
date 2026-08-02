@@ -8,6 +8,7 @@ export type Task = {
   progress: number          // 0-100，完成百分比
   createdAt: number
   lastProgressUpdatedAt?: string  // ISO 时间，progress 变化时更新；旧数据可能缺失，读取时兜底
+  updatedAt?: string              // ISO 时间，任何字段修改时更新，用于合并时判断新旧；旧数据可能缺失
   completed: boolean
   completedAt?: number
   completedOverdue?: boolean  // 是否逾期完成（勾选时 deadline < now）

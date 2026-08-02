@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ListTodo, CalendarDays } from 'lucide-react'
+import { ListTodo, CalendarDays, Settings } from 'lucide-react'
 
 const TABS = [
   { href: '/',         label: '任务',  Icon: ListTodo },
   { href: '/calendar', label: '日历',  Icon: CalendarDays },
+  { href: '/settings', label: '设置',  Icon: Settings },
 ]
 
 export default function BottomNav() {
