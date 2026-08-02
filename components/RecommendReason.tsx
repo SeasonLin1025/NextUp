@@ -21,9 +21,11 @@ interface Props {
   current: ExplainTaskPayload
   runnerUp: ExplainTaskPayload | null
   activeCount: number
+  /** 大卡主题：深色（档位1-3）/ 浅色（档位4），默认 dark */
+  variant?: 'dark' | 'light'
 }
 
-export default function RecommendReason({ cacheKey, current, runnerUp, activeCount }: Props) {
+export default function RecommendReason({ cacheKey, current, runnerUp, activeCount, variant = 'dark' }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [explanation, setExplanation] = useState<string | null>(null)
@@ -73,12 +75,16 @@ export default function RecommendReason({ cacheKey, current, runnerUp, activeCou
     }
   }
 
+  const isLight = variant === 'light'
+
   return (
-    <div className="mt-4 border-t border-white/10 pt-3">
+    <div className={`mt-4 border-t pt-3 ${isLight ? 'border-slate-100' : 'border-white/10'}`}>
       <button
         type="button"
         onClick={handleToggle}
-        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+        className={`flex items-center gap-1 text-xs transition-colors ${
+          isLight ? 'text-slate-400 hover:text-slate-600' : 'text-slate-400 hover:text-slate-200'
+        }`}
       >
         <span>推荐理由</span>
         <ChevronDown
@@ -95,10 +101,10 @@ export default function RecommendReason({ cacheKey, current, runnerUp, activeCou
             </p>
           )}
           {!loading && error && (
-            <p className="text-xs text-red-300">{error}</p>
+            <p className={`text-xs ${isLight ? 'text-red-500' : 'text-red-300'}`}>{error}</p>
           )}
           {!loading && !error && explanation && (
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className={`text-xs leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-300'}`}>
               {explanation}
             </p>
           )}

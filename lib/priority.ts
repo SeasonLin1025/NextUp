@@ -22,6 +22,18 @@ const NEAR_DEADLINE_WINDOW_MINUTES = 30
  */
 export const MUST_START_BUFFER = 1.2
 
+/**
+ * 同 Tier 内 slack 平局容差（分钟）：
+ * 两任务 slack 差值小于该值时视为"同等紧张"，才用 urgency 分先后。
+ */
+export const SLACK_TIE_TOLERANCE_MINUTES = 15
+
+/**
+ * 大卡语气"极宽裕"判定倍数：
+ * slackMinutes > estimateMinutes * AMPLE_SLACK_MULTIPLIER 视为极宽裕。
+ */
+export const AMPLE_SLACK_MULTIPLIER = 10
+
 // ─────────────────────────────────────────────
 // Risk Tier 类型
 // ─────────────────────────────────────────────
@@ -95,11 +107,11 @@ export function getTaskSchedulingMeta(
  * 对 active 任务（未完成、deadline > now）按风险排序
  *
  * 排序规则（优先级依次）：
- * 1. riskTier 升序（Tier 1 最优先）
- * 2. urgency 降序（high > medium > low）
- * 3. slackMinutes 升序（缺口越大越紧迫）
+ * 1. riskTier 升序（Tier 1 最优先）——跨层优先级不变
+ * 2. 同层内 slack 升序（缺口越大/缓冲越小的越靠前）
+ * 3. 若 slack 差值 < SLACK_TIE_TOLERANCE_MINUTES 视为同等紧张 → urgency 降序（high > medium > low）
  * 4. deadline 升序（越早截止越优先）
- * 5. estimateMinutes 升序（越短越优先）
+ * 5. estimateMinutes 降序（越大越优先）
  */
 export function sortActiveTasksByRisk(tasks: Task[], now: number = Date.now()): Task[] {
   const withMeta = tasks.map((t) => ({ t, meta: getTaskSchedulingMeta(t, now) }))
@@ -107,17 +119,17 @@ export function sortActiveTasksByRisk(tasks: Task[], now: number = Date.now()): 
   withMeta.sort((a, b) => {
     // 1. riskTier 升序
     if (a.meta.riskTier !== b.meta.riskTier) return a.meta.riskTier - b.meta.riskTier
-    // 2. urgency 降序
+    // 2. slack 升序；差值在容差内视为同等紧张
+    const slackDiff = a.meta.slackMinutes - b.meta.slackMinutes
+    if (Math.abs(slackDiff) >= SLACK_TIE_TOLERANCE_MINUTES) return slackDiff
+    // 3. urgency 降序
     const uA = URGENCY_WEIGHT[a.t.urgency]
     const uB = URGENCY_WEIGHT[b.t.urgency]
     if (uA !== uB) return uB - uA
-    // 3. slackMinutes 升序
-    if (a.meta.slackMinutes !== b.meta.slackMinutes)
-      return a.meta.slackMinutes - b.meta.slackMinutes
     // 4. deadline 升序
     if (a.t.deadline !== b.t.deadline) return a.t.deadline - b.t.deadline
-    // 5. estimateMinutes 升序
-    return a.t.estimateMinutes - b.t.estimateMinutes
+    // 5. estimateMinutes 降序
+    return b.t.estimateMinutes - a.t.estimateMinutes
   })
 
   return withMeta.map(({ t }) => t)

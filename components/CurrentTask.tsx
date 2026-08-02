@@ -1,7 +1,7 @@
 'use client'
 
 import { Task } from '@/lib/types'
-import { getTaskSchedulingMeta, getAttentionTasks, sortActiveTasksByRisk, RiskTier, TaskSchedulingMeta } from '@/lib/priority'
+import { getTaskSchedulingMeta, getAttentionTasks, sortActiveTasksByRisk, RiskTier, TaskSchedulingMeta, AMPLE_SLACK_MULTIPLIER } from '@/lib/priority'
 import { Card, CardContent } from '@/components/ui/card'
 import { motion } from 'framer-motion'
 import RecommendReason from './RecommendReason'
@@ -49,6 +49,13 @@ const ATTENTION_TIER_BADGE: Partial<Record<RiskTier, { bg: string; text: string;
   3: { bg: 'bg-yellow-500/25', text: 'text-yellow-300', label: '临界但可完成' },
 }
 
+// 浅色大卡（档位4）下的 attention 徽章
+const ATTENTION_TIER_BADGE_LIGHT: Partial<Record<RiskTier, { bg: string; text: string; label: string }>> = {
+  1: { bg: 'bg-red-100',    text: 'text-red-600',    label: '临界且时间不足' },
+  2: { bg: 'bg-orange-100', text: 'text-orange-600', label: '时间不足' },
+  3: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '临界但可完成' },
+}
+
 const MAX_ATTENTION = 2
 
 // ─── AI 推荐理由数据组装 ─────────────────────
@@ -64,6 +71,25 @@ function toExplainPayload(t: Task, m: TaskSchedulingMeta) {
     slackMinutes: Math.round(m.slackMinutes),
     minutesUntilDeadline: Math.round(m.minutesUntilDeadline),
   }
+}
+
+// ─── 大卡语气分级 ────────────────────────────
+
+type ToneLevel = 1 | 2 | 3 | 4
+
+const TONE_HEADING: Record<ToneLevel, string> = {
+  1: '现在必须开始',
+  2: '建议现在处理',
+  3: '接下来做这个',
+  4: '今天可以推进一点',
+}
+
+function getToneLevel(meta: TaskSchedulingMeta, estimateMinutes: number): ToneLevel {
+  if (meta.riskTier === 1 || meta.riskTier === 2) return 1  // 存在时间缺口
+  if (meta.riskTier === 3) return 2                          // 截止临近但能完成
+  // Tier 4
+  if (meta.slackMinutes > estimateMinutes * AMPLE_SLACK_MULTIPLIER) return 4
+  return 3
 }
 
 // ─── 组件 ─────────────────────────────────────
@@ -118,6 +144,8 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
   const timeLeft = formatTimeLeft(task.deadline, now)
   const slack = formatSlack(meta.slackMinutes)
   const tierStyle = RISK_TIER_STYLE[meta.riskTier]
+  const toneLevel = getToneLevel(meta, meta.remainingEstimateMinutes)
+  const isLightTone = toneLevel === 4   // 档位4：浅底轻量样式
 
   // 其他需要关注的任务
   const attentionAll = getAttentionTasks(allTasks, task.id, now)
@@ -145,52 +173,61 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <Card className="bg-gradient-to-br from-slate-900 to-slate-700 border-0 shadow-xl text-white">
+      <Card className={isLightTone
+        ? 'bg-white border border-slate-200 shadow-sm'
+        : 'bg-gradient-to-br from-slate-900 to-slate-700 border-0 shadow-xl text-white'
+      }>
         <CardContent className="py-8 px-7">
 
           {/* 标题行 */}
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold tracking-widest text-slate-400 uppercase">
-              现在做这个
+            <p className={`text-xs font-semibold tracking-widest uppercase ${
+              toneLevel === 4 ? 'text-slate-500' : toneLevel === 1 ? 'text-red-300' : 'text-slate-400'
+            }`}>
+              {TONE_HEADING[toneLevel]}
             </p>
-            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${tierStyle.bg} ${tierStyle.text}`}>
+            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+              isLightTone ? 'bg-slate-100 text-slate-500' : `${tierStyle.bg} ${tierStyle.text}`
+            }`}>
               {tierStyle.dot} {meta.riskLabel}
             </span>
           </div>
 
-          {/* 任务名 */}
-          <p className="text-4xl font-bold leading-tight break-words mb-4">
+          {/* 任务名：档位4 略小但仍为卡内最大元素 */}
+          <p className={`${isLightTone ? 'text-3xl text-slate-800' : 'text-4xl'} font-bold leading-tight break-words mb-4`}>
             {task.name}
           </p>
 
           {/* 副标题 */}
-          <p className="text-sm text-slate-400">
+          <p className={`text-sm ${isLightTone ? 'text-slate-500' : 'text-slate-400'}`}>
             距截止 {timeLeft}
             {' · '}
             预计还需 {formatMinutes(meta.remainingEstimateMinutes)}
             {' · '}
-            <span className={slack.isDeficit ? 'text-red-400 font-semibold' : 'text-slate-400'}>
+            <span className={slack.isDeficit ? `${isLightTone ? 'text-red-500' : 'text-red-400'} font-semibold` : ''}>
               {slack.label}
             </span>
           </p>
 
           {/* 其他需要关注区域 */}
           {attentionShow.length > 0 && (
-            <div className="mt-4 bg-white/10 rounded-lg px-3 py-2.5 space-y-2">
-              <p className="text-xs font-semibold text-slate-300 mb-1.5">
+            <div className={`mt-4 rounded-lg px-3 py-2.5 space-y-2 ${
+              isLightTone ? 'bg-slate-50 border border-slate-100' : 'bg-white/10'
+            }`}>
+              <p className={`text-xs font-semibold mb-1.5 ${isLightTone ? 'text-slate-500' : 'text-slate-300'}`}>
                 其他需要关注（{attentionAll.length}）
               </p>
 
               {attentionShow.map(({ task: at, meta: am }) => {
                 const atTimeLeft = formatTimeLeft(at.deadline, now)
                 const atSlack = formatSlack(am.slackMinutes)
-                const badge = ATTENTION_TIER_BADGE[am.riskTier as 1 | 2 | 3]
+                const badge = (isLightTone ? ATTENTION_TIER_BADGE_LIGHT : ATTENTION_TIER_BADGE)[am.riskTier as 1 | 2 | 3]
 
                 return (
                   <div key={at.id} className="flex flex-col gap-0.5">
                     {/* 任务名 + 标签 */}
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-semibold text-white/90 truncate max-w-[160px]">
+                      <span className={`text-xs font-semibold truncate max-w-[160px] ${isLightTone ? 'text-slate-700' : 'text-white/90'}`}>
                         {at.name}
                       </span>
                       {badge && (
@@ -200,10 +237,10 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
                       )}
                     </div>
                     {/* 时间信息 */}
-                    <p className="text-[11px] text-slate-400 leading-snug">
+                    <p className={`text-[11px] leading-snug ${isLightTone ? 'text-slate-400' : 'text-slate-400'}`}>
                       距截止 {atTimeLeft} · 预计还需 {formatMinutes(am.remainingEstimateMinutes)}
                       {' · '}
-                      <span className={atSlack.isDeficit ? 'text-red-400' : ''}>
+                      <span className={atSlack.isDeficit ? (isLightTone ? 'text-red-500' : 'text-red-400') : ''}>
                         {atSlack.label}
                       </span>
                     </p>
@@ -225,6 +262,7 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
             current={toExplainPayload(task, meta)}
             runnerUp={runnerUpTask ? toExplainPayload(runnerUpTask, getTaskSchedulingMeta(runnerUpTask, now)) : null}
             activeCount={activeSorted.length}
+            variant={isLightTone ? 'light' : 'dark'}
           />
 
         </CardContent>
