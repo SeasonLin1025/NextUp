@@ -7,6 +7,7 @@ export type Task = {
   originalEstimate: number  // 首次录入时的预估耗时，永不改变
   progress: number          // 0-100，完成百分比
   createdAt: number
+  lastProgressUpdatedAt?: string  // ISO 时间，progress 变化时更新；旧数据可能缺失，读取时兜底
   completed: boolean
   completedAt?: number
   completedOverdue?: boolean  // 是否逾期完成（勾选时 deadline < now）

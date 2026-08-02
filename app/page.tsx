@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Task } from '@/lib/types'
-import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen, loadDismissedMustStart, markMustStartDismissed, mustStartSignature } from '@/lib/storage'
+import { loadTasks, saveTasks, loadSeenOverdueIds, markOverdueSeen, loadDismissedMustStart, markMustStartDismissed, mustStartSignature, loadDismissedStagnant, markStagnantDismissed } from '@/lib/storage'
 import { groupTasks, getRecommendedTask, getMustStartTasks } from '@/lib/priority'
+import { getStagnantTasks } from '@/lib/stagnant'
 import CurrentTask from '@/components/CurrentTask'
 import MustStartAlert from '@/components/MustStartAlert'
+import StagnantAlert from '@/components/StagnantAlert'
 import TaskCard from '@/components/TaskCard'
 import TaskInput from '@/components/TaskInput'
 import TaskEditDialog from '@/components/TaskEditDialog'
@@ -141,6 +143,26 @@ export default function HomePage() {
     setDismissVersion((v) => v + 1) // 触发重算
   }, [])
 
+  // 长线任务停滞提醒：关闭时记录当时的 progress，进度推进后再次停滞会重新提醒
+  const MAX_STAGNANT = 2
+  const stagnantAll = (() => {
+    void dismissVersion // dismiss 后触发重算
+    const dismissed = loadDismissedStagnant()
+    return getStagnantTasks(tasks).filter(({ task }) => {
+      const dismissedProgress = dismissed[task.id]
+      if (dismissedProgress === undefined) return true // 从未关闭过
+      // progress 变化过（真的推进了）→ 视为新提醒
+      return dismissedProgress !== (task.progress ?? 0)
+    })
+  })()
+  const stagnantShow = stagnantAll.slice(0, MAX_STAGNANT)
+  const stagnantHidden = stagnantAll.length - stagnantShow.length
+
+  const handleDismissStagnant = useCallback((task: Task) => {
+    markStagnantDismissed(task.id, task.progress ?? 0)
+    setDismissVersion((v) => v + 1)
+  }, [])
+
   if (!mounted) {
     return (
       <main className="min-h-screen bg-gray-50">
@@ -183,6 +205,17 @@ export default function HomePage() {
               items={mustStartShow}
               hiddenCount={mustStartHidden}
               onDismiss={handleDismissMustStart}
+            />
+          </div>
+        )}
+
+        {/* 1.6 长线任务停滞提醒 */}
+        {stagnantShow.length > 0 && (
+          <div className="mb-4">
+            <StagnantAlert
+              items={stagnantShow}
+              hiddenCount={stagnantHidden}
+              onDismiss={handleDismissStagnant}
             />
           </div>
         )}

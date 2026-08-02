@@ -93,6 +93,7 @@ export default function TaskEditDialog({ task, open, onClose, onSave }: Props) {
   function handleSave() {
     if (!validate()) return
     if (!task) return
+    const progressChanged = progress !== (task.progress ?? 0)
     const updated: Task = {
       ...task,
       name: name.trim(),
@@ -101,6 +102,10 @@ export default function TaskEditDialog({ task, open, onClose, onSave }: Props) {
       originalEstimate: parsedOriginalEstimate,
       estimateMinutes: derivedEstimate,
       progress,
+      // 只有进度真的变化才算"有推进"，才更新停滞追踪时间戳
+      lastProgressUpdatedAt: progressChanged
+        ? new Date().toISOString()
+        : task.lastProgressUpdatedAt,
     }
     onSave(updated)
     onClose()
