@@ -32,6 +32,7 @@ function buildSystemPrompt(): string {
 7. 绝对不要在解释里出现"Tier1""Tier2""Tier3""Tier4""slack"这类内部术语。风险分层只用于你自己理解，对用户要用大白话表达，例如"时间最紧""风险最高""还很充裕"。
 8. 解释必须自洽，不能自相矛盾。禁止出现"第二名风险更高，所以排在后面"这类病句。
 9. 停滞是与时间余量独立的维度。若任务被标记为停滞（已 N 天没有推进），即使时间余量充足，也必须在解释中指出它已长期未推进，建议今天投入一点；不要因为时间充裕就表达"可以慢慢来""不必着急""从容安排"这类会助长拖延的措辞。
+10. activeCount 仅指"未超时的待处理任务数"，不包含已超时任务。若存在已超时任务（overdueCount > 0），禁止使用"唯一任务""只有这一项"这类表述；并在解释末尾补一句平实提示，说明还有 N 项已超时任务需要决定是补做还是关闭。若已超时任务数为 0，解释中绝对不要提及任何与超时相关的内容（也不要说"0 项已超时"）。不要指责用户，不要说"你已经失败了"这类话。如总长度不足，超时提示可精简为一句短语（如"另有 N 项已超时待处理"），优先保留推荐理由本身。
 
 排序算法的真实规则（供你理解排序依据，解释时要忠实于它）：
 1. 先按风险层级排（Tier1 最优先，跨层顺序不可逾越）
@@ -85,6 +86,10 @@ export async function POST(req: NextRequest) {
     const current: ExplainTaskPayload | undefined = body?.current
     const runnerUp: ExplainTaskPayload | undefined = body?.runnerUp
     const activeCount: number = body?.activeCount ?? 0
+    const overdueCount: number = body?.overdueCount ?? 0
+    const overdueSample: Array<{ name: string; overdueDays: number }> = Array.isArray(body?.overdueSample)
+      ? body.overdueSample.slice(0, 2)
+      : []
 
     if (!current || !current.name) {
       return NextResponse.json(
@@ -94,10 +99,17 @@ export async function POST(req: NextRequest) {
     }
 
     const userPrompt = [
-      `当前共有 ${activeCount} 个待处理任务。算法推荐的第一名是：`,
-      describeTask(current, true),
+      `当前共有 ${activeCount} 个未超时的待处理任务。已超时任务数：${overdueCount}。`,
+      `算法推荐的第一名是：\n${describeTask(current, true)}`,
       runnerUp && runnerUp.name
         ? `\n排名第二的任务是：\n${describeTask(runnerUp, false)}`
+        : '',
+      overdueCount > 0
+        ? `\n已超时任务不参与本次排序。${
+            overdueSample.length > 0
+              ? '示例：' + overdueSample.map((o) => `${o.name}（已超时 ${o.overdueDays} 天）`).join('、')
+              : ''
+          }`
         : '',
       '\n请解释为什么第一名排在最前。',
     ].join('\n')

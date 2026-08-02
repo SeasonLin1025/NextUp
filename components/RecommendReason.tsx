@@ -21,11 +21,14 @@ interface Props {
   current: ExplainTaskPayload
   runnerUp: ExplainTaskPayload | null
   activeCount: number
+  /** 已超时任务信息：仅供 AI 解释参考，不参与排序 */
+  overdueCount?: number
+  overdueSample?: Array<{ name: string; overdueDays: number }>
   /** 大卡主题：深色（档位1-3）/ 浅色（档位4），默认 dark */
   variant?: 'dark' | 'light'
 }
 
-export default function RecommendReason({ cacheKey, current, runnerUp, activeCount, variant = 'dark' }: Props) {
+export default function RecommendReason({ cacheKey, current, runnerUp, activeCount, overdueCount, overdueSample, variant = 'dark' }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [explanation, setExplanation] = useState<string | null>(null)
@@ -59,6 +62,8 @@ export default function RecommendReason({ cacheKey, current, runnerUp, activeCou
           current,
           runnerUp: runnerUp ?? undefined,
           activeCount,
+          overdueCount: overdueCount ?? 0,
+          overdueSample: overdueSample ?? [],
         }),
       })
       const json = await res.json()

@@ -168,13 +168,25 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
     now
   )
   const runnerUpTask = activeSorted.find((t) => t.id !== task.id) ?? null
-  // 缓存 key 包含上下文：推荐任务换人、第二名变化、任务总数、停滞状态变化都会使缓存失效
+  // 已超时任务信息：仅供 AI 解释参考，不参与排序
+  const overdueTasks = allTasks.filter((t) => !t.completed && t.deadline <= now)
+  const overdueCount = overdueTasks.length
+  const overdueSample = overdueTasks
+    .slice()
+    .sort((a, b) => a.deadline - b.deadline)
+    .slice(0, 2)
+    .map((t) => ({
+      name: t.name,
+      overdueDays: Math.max(0, Math.floor((now - t.deadline) / (24 * 3_600_000))),
+    }))
+  // 缓存 key 包含上下文：推荐任务换人、第二名变化、任务总数、停滞状态、超时数量变化都会使缓存失效
   const reasonCacheKey = [
     'v4',
     task.id, task.deadline, task.estimateMinutes, task.progress,
     stagnantInfo.isStagnant ? 1 : 0, stagnantInfo.stagnantDays,
     runnerUpTask?.id ?? 'none', runnerUpTask?.deadline ?? 0,
     activeSorted.length,
+    overdueCount,
   ].join(':')
 
   return (
@@ -279,6 +291,8 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
             current={toExplainPayload(task, meta, stagnantInfo)}
             runnerUp={runnerUpTask ? toExplainPayload(runnerUpTask, getTaskSchedulingMeta(runnerUpTask, now)) : null}
             activeCount={activeSorted.length}
+            overdueCount={overdueCount}
+            overdueSample={overdueSample}
             variant={isLightTone ? 'light' : 'dark'}
           />
 
