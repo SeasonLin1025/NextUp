@@ -2,6 +2,7 @@
 
 import { Task } from '@/lib/types'
 import { getTaskSchedulingMeta, getAttentionTasks, sortActiveTasksByRisk, RiskTier, TaskSchedulingMeta, AMPLE_SLACK_MULTIPLIER } from '@/lib/priority'
+import { getStagnantInfo } from '@/lib/stagnant'
 import { Card, CardContent } from '@/components/ui/card'
 import { motion } from 'framer-motion'
 import RecommendReason from './RecommendReason'
@@ -60,7 +61,11 @@ const MAX_ATTENTION = 2
 
 // ─── AI 推荐理由数据组装 ─────────────────────
 
-function toExplainPayload(t: Task, m: TaskSchedulingMeta) {
+function toExplainPayload(
+  t: Task,
+  m: TaskSchedulingMeta,
+  stagnant?: { isStagnant: boolean; stagnantDays: number }
+) {
   return {
     name: t.name,
     deadline: new Date(t.deadline).toISOString(),
@@ -70,6 +75,8 @@ function toExplainPayload(t: Task, m: TaskSchedulingMeta) {
     riskTier: m.riskTier,
     slackMinutes: Math.round(m.slackMinutes),
     minutesUntilDeadline: Math.round(m.minutesUntilDeadline),
+    isStagnant: stagnant?.isStagnant ?? false,
+    stagnantDays: stagnant?.stagnantDays ?? 0,
   }
 }
 
@@ -146,6 +153,8 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
   const tierStyle = RISK_TIER_STYLE[meta.riskTier]
   const toneLevel = getToneLevel(meta, meta.remainingEstimateMinutes)
   const isLightTone = toneLevel === 4   // 档位4：浅底轻量样式
+  // 停滞信息：大卡内展示，不受 dismissedStagnantIds 影响（客观状态，非通知）
+  const stagnantInfo = getStagnantInfo(task, now)
 
   // 其他需要关注的任务
   const attentionAll = getAttentionTasks(allTasks, task.id, now)
@@ -159,10 +168,11 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
     now
   )
   const runnerUpTask = activeSorted.find((t) => t.id !== task.id) ?? null
-  // 缓存 key 包含上下文：推荐任务换人、第二名变化、任务总数变化都会使缓存失效
+  // 缓存 key 包含上下文：推荐任务换人、第二名变化、任务总数、停滞状态变化都会使缓存失效
   const reasonCacheKey = [
-    'v3',
+    'v4',
     task.id, task.deadline, task.estimateMinutes, task.progress,
+    stagnantInfo.isStagnant ? 1 : 0, stagnantInfo.stagnantDays,
     runnerUpTask?.id ?? 'none', runnerUpTask?.deadline ?? 0,
     activeSorted.length,
   ].join(':')
@@ -208,6 +218,13 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
               {slack.label}
             </span>
           </p>
+
+          {/* 停滞信息（信息上移：提醒区不再重复展示该任务；不受 dismiss 影响）*/}
+          {stagnantInfo.isStagnant && (
+            <p className={`text-xs mt-2 font-medium ${isLightTone ? 'text-amber-600' : 'text-amber-300'}`}>
+              已 {stagnantInfo.stagnantDays} 天没有推进
+            </p>
+          )}
 
           {/* 其他需要关注区域 */}
           {attentionShow.length > 0 && (
@@ -259,7 +276,7 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
           {/* AI 推荐理由（点击才请求，结果按签名缓存）*/}
           <RecommendReason
             cacheKey={reasonCacheKey}
-            current={toExplainPayload(task, meta)}
+            current={toExplainPayload(task, meta, stagnantInfo)}
             runnerUp={runnerUpTask ? toExplainPayload(runnerUpTask, getTaskSchedulingMeta(runnerUpTask, now)) : null}
             activeCount={activeSorted.length}
             variant={isLightTone ? 'light' : 'dark'}

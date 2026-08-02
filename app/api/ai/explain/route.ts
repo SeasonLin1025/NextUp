@@ -15,6 +15,8 @@ interface ExplainTaskPayload {
   riskTier: number
   slackMinutes: number
   minutesUntilDeadline: number
+  isStagnant?: boolean
+  stagnantDays?: number
 }
 
 function buildSystemPrompt(): string {
@@ -29,6 +31,7 @@ function buildSystemPrompt(): string {
 6. 总长度控制在 80 字以内。
 7. 绝对不要在解释里出现"Tier1""Tier2""Tier3""Tier4""slack"这类内部术语。风险分层只用于你自己理解，对用户要用大白话表达，例如"时间最紧""风险最高""还很充裕"。
 8. 解释必须自洽，不能自相矛盾。禁止出现"第二名风险更高，所以排在后面"这类病句。
+9. 停滞是与时间余量独立的维度。若任务被标记为停滞（已 N 天没有推进），即使时间余量充足，也必须在解释中指出它已长期未推进，建议今天投入一点；不要因为时间充裕就表达"可以慢慢来""不必着急""从容安排"这类会助长拖延的措辞。
 
 排序算法的真实规则（供你理解排序依据，解释时要忠实于它）：
 1. 先按风险层级排（Tier1 最优先，跨层顺序不可逾越）
@@ -61,6 +64,9 @@ function describeTask(t: ExplainTaskPayload, includeProgress: boolean): string {
   ]
   if (includeProgress) {
     lines.push(`- 完成进度：${t.progress ?? 0}%`)
+  }
+  if (t.isStagnant) {
+    lines.push(`- 停滞状态：已 ${t.stagnantDays ?? 0} 天没有推进进度（长期搁置，需在解释中提及）`)
   }
   return lines.join('\n')
 }

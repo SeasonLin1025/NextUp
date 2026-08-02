@@ -33,6 +33,26 @@ function getLastProgressUpdatedMs(task: Task, now: number): number {
 }
 
 /**
+ * 单任务停滞判定（与 getStagnantTasks 同一口径，停滞天数统一 Math.floor）
+ * 大卡与停滞提醒区都必须复用此函数，不要各写一份。
+ */
+export function getStagnantInfo(
+  task: Task,
+  now: number = Date.now()
+): { isStagnant: boolean; stagnantDays: number } {
+  if (task.completed) return { isStagnant: false, stagnantDays: 0 }
+  if (task.deadline <= now) return { isStagnant: false, stagnantDays: 0 }
+  if (task.deadline - now <= LONG_TERM_WINDOW_MS) return { isStagnant: false, stagnantDays: 0 }
+  if ((task.progress ?? 0) >= 100) return { isStagnant: false, stagnantDays: 0 }
+
+  const lastMs = getLastProgressUpdatedMs(task, now)
+  const stagnantMs = now - lastMs
+  if (stagnantMs < STAGNANT_DAYS_THRESHOLD * DAY_MS) return { isStagnant: false, stagnantDays: 0 }
+
+  return { isStagnant: true, stagnantDays: Math.floor(stagnantMs / DAY_MS) }
+}
+
+/**
  * 收集所有停滞的长线任务，按停滞天数从多到少排序。
  * 停滞定义（需同时满足）：
  * - 未完成、未超时
@@ -45,18 +65,11 @@ export function getStagnantTasks(tasks: Task[], now: number = Date.now()): Stagn
 
   const items: StagnantItem[] = []
   for (const t of tasks) {
-    if (t.completed) continue
-    if (t.deadline <= now) continue                       // 已超时不进入
-    if (t.deadline - now <= LONG_TERM_WINDOW_MS) continue // 非长线不进入
-    if ((t.progress ?? 0) >= 100) continue
-
-    const lastMs = getLastProgressUpdatedMs(t, now)
-    const stagnantMs = now - lastMs
-    if (stagnantMs < STAGNANT_DAYS_THRESHOLD * DAY_MS) continue
-
+    const info = getStagnantInfo(t, now)
+    if (!info.isStagnant) continue
     items.push({
       task: t,
-      stagnantDays: Math.floor(stagnantMs / DAY_MS),
+      stagnantDays: info.stagnantDays,
       daysUntilDeadline: Math.floor((t.deadline - now) / DAY_MS),
     })
   }

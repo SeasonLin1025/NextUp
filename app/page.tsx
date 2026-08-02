@@ -150,7 +150,12 @@ export default function HomePage() {
   const stagnantAll = (() => {
     void dismissVersion // dismiss 后触发重算
     const dismissed = loadDismissedStagnant()
+    // 大卡第一名的停滞信息已上移至大卡内展示，提醒区不再重复；
+    // 每次渲染基于当前排序实时计算，不用 state/localStorage 记忆；
+    // 无第一名（空状态/红色警示状态）时 firstId 为 undefined，跳过排除
+    const firstId = topTask?.id
     return getStagnantTasks(tasks).filter(({ task }) => {
+      if (firstId && task.id && task.id === firstId) return false
       const dismissedProgress = dismissed[task.id]
       if (dismissedProgress === undefined) return true // 从未关闭过
       // progress 变化过（真的推进了）→ 视为新提醒
