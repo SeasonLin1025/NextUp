@@ -88,7 +88,13 @@ export default function TaskInput({ open, onClose, onAdd }: Props) {
       const res = await fetch('/api/ai/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: aiText.trim(), nowISO: new Date().toISOString() }),
+        body: JSON.stringify({
+          text: aiText.trim(),
+          nowISO: new Date().toISOString(),
+          // 浏览器真实时区，服务端据此计算"今晚/明天"等本地语义
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        }),
       })
       const json = await res.json()
       if (!json.ok) {
