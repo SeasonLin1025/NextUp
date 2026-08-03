@@ -385,7 +385,7 @@ export default function HomePage() {
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
         onClick={() => setDialogOpen(true)}
-        className="fixed bottom-8 right-6 w-14 h-14 rounded-full bg-slate-900 text-white shadow-xl flex items-center justify-center z-40"
+        className="fixed bottom-20 right-6 w-14 h-14 rounded-full bg-slate-900 text-white shadow-xl flex items-center justify-center z-40"
         aria-label="添加任务"
       >
         <Plus size={26} strokeWidth={2.5} />
