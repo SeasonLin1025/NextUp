@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { DEEPSEEK_BASE_URL, DEEPSEEK_MODEL } from '@/lib/deepseek'
 
 // 只在服务端运行，不使用 Edge（保证能读到 process.env）
 export const runtime = 'nodejs'
-
-const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
-const DEEPSEEK_MODEL = 'deepseek-chat'
 
 interface ParsedTask {
   name: string

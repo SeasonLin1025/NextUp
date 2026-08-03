@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { DEEPSEEK_BASE_URL, DEEPSEEK_MODEL } from '@/lib/deepseek'
 
 // 只在服务端运行，key 绝不暴露给前端
 export const runtime = 'nodejs'
-
-const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
-const DEEPSEEK_MODEL = 'deepseek-chat'
 
 interface ExplainTaskPayload {
   name: string
@@ -127,7 +125,9 @@ export async function POST(req: NextRequest) {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 200,
+        // deepseek-v4-flash 为推理型模型，推理过程也消耗 completion tokens，
+        // 需预留足够额度，否则 content 为空（finish_reason=length）
+        max_tokens: 800,
       }),
     })
 
