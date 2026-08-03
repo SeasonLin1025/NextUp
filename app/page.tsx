@@ -13,6 +13,7 @@ import TaskInput from '@/components/TaskInput'
 import TaskEditDialog from '@/components/TaskEditDialog'
 import SectionGroup from '@/components/SectionGroup'
 import OverdueBanner from '@/components/OverdueBanner'
+import OverdueDecisionQueue from '@/components/OverdueDecisionQueue'
 import BottomNav from '@/components/BottomNav'
 import { Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -28,6 +29,7 @@ export default function HomePage() {
   const [longTermOpen, setLongTermOpen] = useState(true)
   const [overdueOpen, setOverdueOpen] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
+  const [abandonedOpen, setAbandonedOpen] = useState(false)
 
   // Overdue banner & seen tracking
   const [newOverdueIds, setNewOverdueIds] = useState<string[]>([])
@@ -107,6 +109,38 @@ export default function HomePage() {
 
   const handleEdit = useCallback((updated: Task) => {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+  }, [])
+
+  // 超时决策：重新安排（重排不等于推进进度，不更新 lastProgressUpdatedAt）
+  const handleReschedule = useCallback((id: string, newDeadline: number) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              deadline: newDeadline,
+              rescheduleCount: (t.rescheduleCount ?? 0) + 1,
+              updatedAt: new Date().toISOString(),
+            }
+          : t
+      )
+    )
+  }, [])
+
+  // 超时决策：不做了（软删除，保留记录）
+  const handleAbandon = useCallback((id: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              abandoned: true,
+              abandonedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          : t
+      )
+    )
   }, [])
 
   // Banner click: scroll to overdue section, mark seen, hide banner
@@ -196,9 +230,26 @@ export default function HomePage() {
             <p className="text-xs text-slate-400 mt-0.5">专注当下，一件一件来</p>
           </div>
           <span className="text-xs text-slate-400 bg-white border rounded-full px-3 py-1 shadow-sm">
-            {groups.pending.length} 项待完成
+            {groups.pending.length + groups.longTerm.length + groups.overdue.length} 项未完成
+            {groups.overdue.length > 0 && (
+              <>
+                {' · '}
+                <span className="text-red-500 font-semibold">{groups.overdue.length} 项超时</span>
+              </>
+            )}
           </span>
         </div>
+
+        {/* 0. 超时任务待决策区（页面最顶部，大卡之上；无关闭按钮，决策后才消失）*/}
+        {groups.overdue.length > 0 && (
+          <div className="mb-4">
+            <OverdueDecisionQueue
+              tasks={groups.overdue}
+              onReschedule={handleReschedule}
+              onAbandon={handleAbandon}
+            />
+          </div>
+        )}
 
         {/* 1. 顶部大卡片 */}
         <div className="mb-4">
@@ -303,6 +354,23 @@ export default function HomePage() {
             >
               <AnimatePresence mode="popLayout">
                 {groups.done.map((task) => (
+                  <TaskCard key={task.id} task={task} variant="done" onToggle={handleToggle} onEdit={setEditTask} />
+                ))}
+              </AnimatePresence>
+            </SectionGroup>
+          )}
+
+          {/* 7. 已放弃（默认折叠，与已完成语义分离）*/}
+          {groups.abandoned.length > 0 && (
+            <SectionGroup
+              title="已放弃"
+              count={groups.abandoned.length}
+              isOpen={abandonedOpen}
+              onToggle={() => setAbandonedOpen((v) => !v)}
+              titleColor="text-gray-400"
+            >
+              <AnimatePresence mode="popLayout">
+                {groups.abandoned.map((task) => (
                   <TaskCard key={task.id} task={task} variant="done" onToggle={handleToggle} onEdit={setEditTask} />
                 ))}
               </AnimatePresence>

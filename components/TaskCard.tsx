@@ -49,7 +49,7 @@ function formatDaysLeft(deadline: number): string {
 
 export default function TaskCard({ task, variant = 'default', onToggle, onEdit }: Props) {
   const cfg = urgencyConfig[task.urgency]
-  const isDone = task.completed
+  const isDone = task.completed || task.abandoned === true
   const isOverdue = variant === 'overdue'
   const isLongTerm = variant === 'longTerm'
 

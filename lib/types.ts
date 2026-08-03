@@ -12,4 +12,7 @@ export type Task = {
   completed: boolean
   completedAt?: number
   completedOverdue?: boolean  // 是否逾期完成（勾选时 deadline < now）
+  abandoned?: boolean         // 已放弃标记（"不做了"），默认 false
+  abandonedAt?: string        // ISO 时间，标记放弃的时间，未放弃时为空
+  rescheduleCount?: number    // 重新安排次数，默认 0，每次重排 +1
 }

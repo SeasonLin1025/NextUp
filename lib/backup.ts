@@ -57,6 +57,8 @@ function normalizeTask(t: Task, now: number): Task {
     originalEstimate: t.originalEstimate ?? t.estimateMinutes,
     lastProgressUpdatedAt: t.lastProgressUpdatedAt ?? fallbackISO,
     updatedAt: t.updatedAt ?? fallbackISO,
+    abandoned: t.abandoned ?? false,
+    rescheduleCount: t.rescheduleCount ?? 0,
   }
 }
 

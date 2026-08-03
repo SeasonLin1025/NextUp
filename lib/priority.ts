@@ -140,7 +140,7 @@ export function sortActiveTasksByRisk(tasks: Task[], now: number = Date.now()): 
  * 包含「待完成」和「长线任务」，长线任务若进入高风险同样可被推荐
  */
 export function getRecommendedTask(tasks: Task[], now: number = Date.now()): Task | null {
-  const active = tasks.filter((t) => !t.completed && t.deadline > now)
+  const active = tasks.filter((t) => !t.completed && !t.abandoned && t.deadline > now)
   if (active.length === 0) return null
   const sorted = sortActiveTasksByRisk(active, now)
   return sorted[0]
@@ -159,7 +159,7 @@ export function getAttentionTasks(
   if (!tasks || tasks.length === 0) return []
 
   const candidates = tasks.filter((t) => {
-    if (t.completed || t.deadline <= now) return false
+    if (t.completed || t.abandoned || t.deadline <= now) return false
     if (t.id === recommendedTaskId) return false
     const meta = getTaskSchedulingMeta(t, now)
     return meta.slackMinutes < 0 || meta.minutesUntilDeadline <= 30 || meta.riskTier <= 3
@@ -174,7 +174,7 @@ export function getAttentionTasks(
  * 条件：minutesUntilDeadline <= remainingEstimateMinutes * MUST_START_BUFFER
  */
 export function isMustStartNow(task: Task, now: number = Date.now()): boolean {
-  if (task.completed || task.deadline <= now) return false
+  if (task.completed || task.abandoned || task.deadline <= now) return false
   const meta = getTaskSchedulingMeta(task, now)
   return meta.minutesUntilDeadline <= meta.remainingEstimateMinutes * MUST_START_BUFFER
 }
@@ -201,8 +201,9 @@ export function getMustStartTasks(
 export type TaskGroup = {
   pending: Task[]    // 待完成：deadline 在 now ~ now+7天
   longTerm: Task[]   // 长线任务：deadline > now+7天
-  overdue: Task[]    // 已超时：deadline < now，未完成
+  overdue: Task[]    // 已超时：deadline < now，未完成、未放弃
   done: Task[]       // 已完成
+  abandoned: Task[]  // 已放弃（"不做了"），与已完成语义分离
 }
 
 export function groupTasks(tasks: Task[]): TaskGroup {
@@ -212,9 +213,12 @@ export function groupTasks(tasks: Task[]): TaskGroup {
   const longTerm: Task[] = []
   const overdue: Task[] = []
   const done: Task[] = []
+  const abandoned: Task[] = []
 
   for (const t of tasks) {
-    if (t.completed) {
+    if (t.abandoned) {
+      abandoned.push(t)
+    } else if (t.completed) {
       done.push(t)
     } else if (t.deadline < now) {
       overdue.push(t)
@@ -232,8 +236,10 @@ export function groupTasks(tasks: Task[]): TaskGroup {
   overdue.sort((a, b) => a.deadline - b.deadline)
   // 已完成：按 completedAt 倒序
   done.sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
+  // 已放弃：按 abandonedAt 倒序
+  abandoned.sort((a, b) => (b.abandonedAt ?? '').localeCompare(a.abandonedAt ?? ''))
 
-  return { pending: sortedPending, longTerm: sortedLongTerm, overdue, done }
+  return { pending: sortedPending, longTerm: sortedLongTerm, overdue, done, abandoned }
 }
 
 /** 兼容旧版 sortTasks，将四区展平返回 */

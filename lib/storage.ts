@@ -27,6 +27,9 @@ export function loadTasks(): Task[] {
         (typeof t.createdAt === 'number' && !isNaN(t.createdAt)
           ? new Date(t.createdAt).toISOString()
           : new Date().toISOString()),
+      // 超时决策相关字段兜底
+      abandoned: t.abandoned ?? false,
+      rescheduleCount: t.rescheduleCount ?? 0,
     }))
   } catch {
     return []

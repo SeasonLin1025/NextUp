@@ -40,7 +40,7 @@ export function getStagnantInfo(
   task: Task,
   now: number = Date.now()
 ): { isStagnant: boolean; stagnantDays: number } {
-  if (task.completed) return { isStagnant: false, stagnantDays: 0 }
+  if (task.completed || task.abandoned) return { isStagnant: false, stagnantDays: 0 }
   if (task.deadline <= now) return { isStagnant: false, stagnantDays: 0 }
   if (task.deadline - now <= LONG_TERM_WINDOW_MS) return { isStagnant: false, stagnantDays: 0 }
   if ((task.progress ?? 0) >= 100) return { isStagnant: false, stagnantDays: 0 }

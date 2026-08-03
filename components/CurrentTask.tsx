@@ -104,7 +104,7 @@ function getToneLevel(meta: TaskSchedulingMeta, estimateMinutes: number): ToneLe
 export default function CurrentTask({ task, allTasks = [] }: Props) {
   if (!task) {
     const now = Date.now()
-    const overdueCount = allTasks.filter((t) => !t.completed && t.deadline <= now).length
+    const overdueCount = allTasks.filter((t) => !t.completed && !t.abandoned && t.deadline <= now).length
 
     // 仅有超时任务：警示卡（与绿色明确区分，不用正面词汇）
     if (overdueCount > 0) {
@@ -164,12 +164,12 @@ export default function CurrentTask({ task, allTasks = [] }: Props) {
   // AI 推荐理由：取现有排序结果，第一名=当前推荐，第二名=runnerUp
   // （排序完全由算法决定，AI 只做解释）
   const activeSorted = sortActiveTasksByRisk(
-    allTasks.filter((t) => !t.completed && t.deadline > now),
+    allTasks.filter((t) => !t.completed && !t.abandoned && t.deadline > now),
     now
   )
   const runnerUpTask = activeSorted.find((t) => t.id !== task.id) ?? null
   // 已超时任务信息：仅供 AI 解释参考，不参与排序
-  const overdueTasks = allTasks.filter((t) => !t.completed && t.deadline <= now)
+  const overdueTasks = allTasks.filter((t) => !t.completed && !t.abandoned && t.deadline <= now)
   const overdueCount = overdueTasks.length
   const overdueSample = overdueTasks
     .slice()
